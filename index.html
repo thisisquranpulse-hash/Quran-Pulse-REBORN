@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NurQuran Pulse</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com" rel="preconnect"/>
+    <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+Arabic:wght@400;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+    <style>
+      body {
+        font-family: 'Inter', sans-serif;
+      }
+      .font-arabic {
+        font-family: 'Noto Sans Arabic', sans-serif;
+        line-height: 2.5;
+      }
+      .no-scrollbar::-webkit-scrollbar {
+          display: none;
+      }
+      .no-scrollbar {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+      }
+    </style>
+    <script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#38BDF8", // Sky Blue 400 - Brighter for the navy background
+                        "secondary": "#94a3b8", // Slate 400
+                        
+                        // Theme extracted from Image
+                        "background-dark": "#040E1E", // Deep Midnight Navy
+                        "surface-dark": "#0B1A34", // Dark Royal Blue
+                        "surface-card": "#112545", // Lighter Blue for inputs/cards
+                        "surface-hover": "#1a3050", // Hover state
+                        "border-color": "#1E3A5F", // Blue-grey borders
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"],
+                        "arabic": ["'Noto Sans Arabic'", "sans-serif"],
+                    },
+                    boxShadow: {
+                        'neon': '0 0 20px rgba(56, 189, 248, 0.15)',
+                        'glass': '0 8px 32px 0 rgba(0, 0, 0, 0.37)',
+                    }
+                },
+            },
+        }
+    </script>
+  <script type="importmap">
+{
+  "imports": {
+    "react-markdown": "https://esm.sh/react-markdown@^10.1.0",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3",
+    "@google/genai": "https://esm.sh/@google/genai@^1.33.0",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2"
+  }
+}
+</script>
+</head>
+  <body class="bg-background-dark text-white h-screen overflow-hidden selection:bg-primary selection:text-background-dark">
+    <div id="root" class="h-full"></div>
+  </body>
+</html>
