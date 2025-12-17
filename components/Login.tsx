@@ -15,20 +15,23 @@ export const Login: React.FC = () => {
   const handleGoogleLogin = async () => {
     setLoading(true);
     setMessage(null);
+    
+    // Debugging: Log the redirect URL being used
+    const redirectUrl = window.location.origin;
+    console.log("Google Login Redirect URL:", redirectUrl);
+
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: window.location.origin,
-          queryParams: {
-            access_type: 'offline',
-            prompt: 'consent',
-          },
+          // PENTING: URL ini (contoh: http://localhost:5173) MESTI ada dalam "Redirect URLs" di Supabase Dashboard
+          redirectTo: redirectUrl,
         },
       });
       if (error) throw error;
     } catch (error: any) {
-      setMessage({ type: 'error', text: error.message });
+      console.error("Google Login Error:", error);
+      setMessage({ type: 'error', text: error.message || "Google Login failed. Check console for details." });
       setLoading(false);
     }
   };
