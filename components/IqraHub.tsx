@@ -148,29 +148,24 @@ export const IqraHub: React.FC<IqraHubProps> = ({ onLogUpdate }) => {
 
     if (selectedLevel) {
         return (
-            <div className="h-full flex flex-col bg-background-dark text-white p-4">
+            <div className="h-full flex flex-col bg-background-dark/0 text-white p-4 relative">
                 {/* Header */}
                 <div className="flex items-center justify-between mb-6">
-                    <button onClick={() => setSelectedLevel(null)} className="flex items-center text-slate-400 hover:text-white transition-colors">
-                        <span className="material-symbols-outlined mr-1">arrow_back</span>
-                        Back to Hub
+                    <button onClick={() => setSelectedLevel(null)} className="flex items-center text-slate-400 hover:text-white transition-colors bg-white/5 px-3 py-1 rounded-full">
+                        <span className="material-symbols-outlined mr-1 text-sm">arrow_back</span>
+                        <span className="text-xs font-bold uppercase">Hub</span>
                     </button>
                     <div className="text-center">
                         <h2 className="font-bold text-xl text-white">{selectedLevel.title}</h2>
                         <div className="flex items-center justify-center gap-2 text-xs text-slate-400 mt-1">
                              <span>Page {currentPage} of {selectedLevel.total_pages}</span>
-                             {progressMap[selectedLevel.level]?.accuracy > 0 && (
-                                 <span className="bg-white/10 px-2 py-0.5 rounded text-emerald-400">
-                                     Avg {progressMap[selectedLevel.level].accuracy}%
-                                 </span>
-                             )}
                         </div>
                     </div>
-                    <div className="w-24"></div> 
+                    <div className="w-16"></div> 
                 </div>
 
                 {/* Reader Area */}
-                <div className="flex-1 flex flex-col items-center justify-center relative">
+                <div className="flex-1 flex flex-col items-center justify-center relative overflow-hidden">
                     
                     {/* Progress Bar (Top of Reader) */}
                     <div className="w-full max-w-md h-1.5 bg-white/10 rounded-full mb-6 overflow-hidden">
@@ -181,32 +176,32 @@ export const IqraHub: React.FC<IqraHubProps> = ({ onLogUpdate }) => {
                     </div>
 
                     {/* Mock Book Content */}
-                    <div className="bg-[#fdf6e3] text-black w-full max-w-md aspect-[3/4] rounded-lg shadow-2xl p-8 flex flex-col items-center justify-center border-l-4 border-[#e8dcc0] relative overflow-hidden transition-all">
+                    <div className="bg-[#fdf6e3] text-black w-full max-w-sm aspect-[3/4] rounded-lg shadow-2xl p-6 flex flex-col items-center justify-center border-l-4 border-[#e8dcc0] relative overflow-hidden transition-all scale-95 md:scale-100">
                         <div className="absolute top-0 right-0 p-4 opacity-10">
                             <span className="material-symbols-outlined text-9xl">menu_book</span>
                         </div>
                         
                         <div className="grid grid-cols-2 gap-8 z-10">
                             {MOCK_PAGES[Math.min(currentPage-1, MOCK_PAGES.length-1)].letters.map((l, i) => (
-                                <div key={i} className="text-8xl font-arabic font-bold text-center border-b-2 border-black/10 pb-4">
+                                <div key={i} className="text-7xl font-arabic font-bold text-center border-b-2 border-black/10 pb-4">
                                     {l}
                                 </div>
                             ))}
                         </div>
                         
-                        <p className="mt-12 text-sm text-slate-500 font-mono">Baca dengan jelas</p>
+                        <p className="mt-8 text-xs text-slate-500 font-mono">Baca dengan jelas</p>
                     </div>
 
                     {/* Feedback Overlay */}
                     {feedback && (
-                         <div className={`mt-6 p-4 rounded-xl border backdrop-blur-md ${feedback.is_correct ? 'bg-emerald-500/10 border-emerald-500/50' : 'bg-amber-500/10 border-amber-500/50'} max-w-md w-full animate-in fade-in slide-in-from-bottom-4 shadow-lg`}>
+                         <div className={`absolute bottom-4 left-1/2 -translate-x-1/2 p-4 rounded-xl border backdrop-blur-md ${feedback.is_correct ? 'bg-emerald-500/90 border-emerald-500/50' : 'bg-amber-500/90 border-amber-500/50'} max-w-md w-[90%] animate-in fade-in slide-in-from-bottom-4 shadow-lg z-20`}>
                              <div className="flex items-center justify-between mb-2">
-                                 <h4 className={`font-bold ${feedback.is_correct ? 'text-emerald-400' : 'text-amber-400'}`}>
+                                 <h4 className={`font-bold ${feedback.is_correct ? 'text-white' : 'text-white'}`}>
                                      {feedback.is_correct ? 'MashaAllah! Tepat.' : 'Cuba Lagi'}
                                  </h4>
-                                 <span className={`text-xs font-mono px-2 py-1 rounded ${feedback.is_correct ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}`}>Score: {feedback.accuracy_score}%</span>
+                                 <span className="text-xs font-mono px-2 py-1 rounded bg-black/20 text-white">Score: {feedback.accuracy_score}%</span>
                              </div>
-                             <p className="text-sm text-slate-200">{feedback.feedback_bm}</p>
+                             <p className="text-sm text-white mb-2">{feedback.feedback_bm}</p>
                              
                              {feedback.is_correct && currentPage < selectedLevel.total_pages && (
                                  <button 
@@ -214,7 +209,7 @@ export const IqraHub: React.FC<IqraHubProps> = ({ onLogUpdate }) => {
                                         setCurrentPage(c => Math.min(c + 1, selectedLevel.total_pages));
                                         setFeedback(null);
                                     }}
-                                    className="mt-3 w-full bg-emerald-500 text-white py-2 rounded-lg text-sm font-bold hover:bg-emerald-400 transition-colors"
+                                    className="w-full bg-white text-emerald-600 py-2 rounded-lg text-sm font-bold shadow-md"
                                  >
                                      Next Page
                                  </button>
@@ -224,21 +219,21 @@ export const IqraHub: React.FC<IqraHubProps> = ({ onLogUpdate }) => {
                 </div>
 
                 {/* Controls */}
-                <div className="mt-8 flex items-center justify-center gap-8 pb-8">
-                     <button onClick={() => setCurrentPage(Math.max(1, currentPage - 1))} className="p-4 rounded-full bg-surface-card hover:bg-surface-hover text-white transition-colors border border-white/5">
+                <div className="mt-4 flex items-center justify-center gap-6 pb-4">
+                     <button onClick={() => setCurrentPage(Math.max(1, currentPage - 1))} className="p-3 rounded-full bg-surface-card hover:bg-surface-hover text-white transition-colors border border-white/5">
                         <span className="material-symbols-outlined">chevron_left</span>
                      </button>
 
                      <button 
                         onClick={isRecording ? stopRecording : startRecording}
-                        className={`w-20 h-20 rounded-full flex items-center justify-center shadow-neon transition-all transform hover:scale-105 ${isRecording ? 'bg-red-500 animate-pulse' : 'bg-primary'}`}
+                        className={`w-16 h-16 rounded-full flex items-center justify-center shadow-neon transition-all transform hover:scale-105 ${isRecording ? 'bg-red-500 animate-pulse' : 'bg-primary'}`}
                      >
-                        <span className="material-symbols-outlined text-4xl text-background-dark">
+                        <span className="material-symbols-outlined text-3xl text-background-dark">
                             {isRecording ? 'stop' : (loading ? 'hourglass_empty' : 'mic')}
                         </span>
                      </button>
 
-                     <button onClick={() => setCurrentPage(Math.min(selectedLevel.total_pages, currentPage + 1))} className="p-4 rounded-full bg-surface-card hover:bg-surface-hover text-white transition-colors border border-white/5">
+                     <button onClick={() => setCurrentPage(Math.min(selectedLevel.total_pages, currentPage + 1))} className="p-3 rounded-full bg-surface-card hover:bg-surface-hover text-white transition-colors border border-white/5">
                         <span className="material-symbols-outlined">chevron_right</span>
                      </button>
                 </div>
@@ -248,9 +243,9 @@ export const IqraHub: React.FC<IqraHubProps> = ({ onLogUpdate }) => {
 
     return (
         <div className="p-6 h-full overflow-y-auto no-scrollbar">
-            <div className="mb-8 relative z-10">
+            <div className="mb-8 relative z-10 text-center">
                 <h1 className="text-3xl font-bold mb-2 tracking-tight text-white">Iqra' Hub</h1>
-                <p className="text-slate-400">Master the Quran from basics with AI Ustaz feedback.</p>
+                <p className="text-slate-400">Master the Quran from basics with AI Ustaz.</p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 relative z-10">
@@ -263,7 +258,7 @@ export const IqraHub: React.FC<IqraHubProps> = ({ onLogUpdate }) => {
                         <button 
                             key={lvl.level}
                             onClick={() => handleLevelSelect(lvl)}
-                            className="group relative overflow-hidden rounded-3xl p-6 bg-surface-card border border-white/5 hover:border-white/20 transition-all text-left shadow-lg hover:shadow-2xl hover:-translate-y-1"
+                            className="group relative overflow-hidden rounded-3xl p-6 bg-surface-card/40 border border-white/5 hover:border-white/20 transition-all text-left shadow-lg hover:shadow-2xl hover:-translate-y-1"
                         >
                             <div className={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-br ${lvl.color} opacity-10 rounded-bl-full group-hover:opacity-20 transition-opacity`}></div>
                             

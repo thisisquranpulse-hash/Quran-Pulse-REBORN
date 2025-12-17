@@ -253,7 +253,7 @@ export const LiveTutor: React.FC<LiveTutorProps> = ({ onLogUpdate }) => {
     };
 
     return (
-        <div className="flex flex-col items-center justify-center h-full p-8 bg-surface-dark/30 backdrop-blur-sm border border-white/10 rounded-3xl relative overflow-hidden">
+        <div className="flex flex-col items-center justify-center h-full p-8 relative overflow-hidden">
             
             <div className="z-10 flex flex-col items-center gap-8 text-center max-w-lg">
                 <div className={`p-6 rounded-full border-4 shadow-[0_0_30px_rgba(90,185,255,0.2)] transition-all duration-500 ${isActive ? 'border-primary shadow-neon bg-primary/20' : 'border-white/10 bg-white/5'}`}>

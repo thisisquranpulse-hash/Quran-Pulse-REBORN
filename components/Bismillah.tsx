@@ -1,10 +1,10 @@
 import React from 'react';
 
-interface LogoProps {
+interface BismillahProps {
   className?: string;
 }
 
-export const Logo: React.FC<LogoProps> = ({ className }) => {
+export const Bismillah: React.FC<BismillahProps> = ({ className }) => {
   return (
     <svg 
       viewBox="0 0 805 475" 

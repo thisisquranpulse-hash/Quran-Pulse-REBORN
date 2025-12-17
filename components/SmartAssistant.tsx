@@ -70,7 +70,7 @@ export const SmartAssistant: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-full bg-surface-dark/30 backdrop-blur-sm rounded-none lg:rounded-3xl overflow-hidden shadow-lg border-x lg:border border-white/10">
+    <div className="flex flex-col h-full bg-surface-dark/30 backdrop-blur-sm rounded-3xl overflow-hidden shadow-lg border border-white/10">
       <div className="bg-surface-dark/80 p-4 border-b border-white/10 flex justify-between items-center backdrop-blur-md">
         <h2 className="font-bold text-white tracking-wide flex items-center gap-2">
             <span className="material-symbols-outlined text-primary">smart_toy</span>
@@ -90,7 +90,7 @@ export const SmartAssistant: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-6 no-scrollbar">
+      <div className="flex-1 overflow-y-auto p-4 space-y-6 no-scrollbar bg-background-dark/20">
         {messages.length === 0 && (
             <div className="flex flex-col items-center justify-center h-full text-slate-500 opacity-50 text-center">
                 <span className="material-symbols-outlined text-6xl mb-4">quiz</span>

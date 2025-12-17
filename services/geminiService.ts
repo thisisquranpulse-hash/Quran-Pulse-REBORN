@@ -8,6 +8,44 @@ export const getAiClient = () => {
   return new GoogleGenAI({ apiKey: process.env.API_KEY });
 };
 
+// --- LOCATION SERVICES (New) ---
+export const identifyLocation = async (lat: number, lng: number) => {
+  const ai = getAiClient();
+  try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: `
+        You are a location detector. 
+        1. Identify the specific City/District and State name for coordinates: ${lat}, ${lng}.
+        2. Find 3 nearest Mosques (Masjid) within 10km.
+        
+        Strictly follow this output format:
+        LOCATION: [City Name], [State]
+        MOSQUES:
+        - [Masjid Name]
+        - [Masjid Name]
+        - [Masjid Name]
+        `,
+        config: {
+          tools: [{ googleMaps: {} }],
+          toolConfig: {
+            retrievalConfig: {
+              latLng: { latitude: lat, longitude: lng }
+            }
+          }
+        }
+      });
+      
+      return {
+        text: response.text || "",
+        chunks: response.candidates?.[0]?.groundingMetadata?.groundingChunks || []
+      };
+  } catch (e) {
+      console.error("Location ID failed", e);
+      return { text: "", chunks: [] };
+  }
+};
+
 // --- IQRA AI FEEDBACK ENGINE (New) ---
 export const analyzeIqraReading = async (audioBlob: Blob, expectedText: string, level: number) => {
     const ai = getAiClient();
@@ -63,17 +101,30 @@ export const analyzeIqraReading = async (audioBlob: Blob, expectedText: string, 
 export const generateVerseInsight = async (arabic: string, translation: string, verseKey: string) => {
     const ai = getAiClient();
     const prompt = `
-    Analyze this Quranic Verse for "Pulse Verse Studio". Provide a comprehensive, scholarly yet accessible analysis.
+    Analyze this Quranic Verse for "Pulse Verse Studio". Provide a comprehensive, scholarly analysis suitable for a student of knowledge.
+
     Verse: ${verseKey}
     Arabic: ${arabic}
     Translation: ${translation}
 
+    Instructions:
+    1. **Core Theme**: A powerful, concise title.
+    2. **Tafsir**: A deep explanation of the meaning (Tafsir Jalalayn/Ibn Kathir style).
+    3. **Historical Context**: Explain the Asbab al-Nuzul (Reason for revelation) or the context (Makki/Madani).
+    4. **Linguistic Analysis**: Analyze the Balaghah (Rhetoric), Nahw (Grammar), or imagery used in the Arabic text.
+    5. **Key Words**: Select 3 specific Arabic root words from the verse and explain their deep meaning.
+
     Output JSON format ONLY:
     {
-        "coreTheme": "A short, powerful title (3-5 words) capturing the essence",
-        "tafsir": "A detailed paragraph (approx 40-50 words) explaining the spiritual meaning, lessons, and theology.",
-        "linguistics": "Analysis of specific Arabic root words, rhetorical devices (Balaghah), or grammatical nuance visible in this verse.",
-        "history": "Historical context (Asbab al-Nuzul) or the specific context of revelation (Makki/Madani phase) and its relevance."
+        "coreTheme": "string",
+        "tafsir": "string",
+        "history": "string (Detailed historical context or Asbab al-Nuzul)",
+        "linguistics": "string (Detailed analysis of rhetoric and grammar)",
+        "keyWords": [
+            { "word": "Arabic Word", "meaning": "Deep definition" },
+            { "word": "Arabic Word", "meaning": "Deep definition" },
+            { "word": "Arabic Word", "meaning": "Deep definition" }
+        ]
     }
     `;
 
@@ -90,9 +141,10 @@ export const generateVerseInsight = async (arabic: string, translation: string, 
         console.error("Insight Error", e);
         return {
             coreTheme: "Divine Wisdom",
-            tafsir: "An error occurred generating the analysis. Please reflect on the clear translation provided.",
-            linguistics: "The structure holds deep meaning found in the Arabic original.",
-            history: "Context unavailable at this moment."
+            tafsir: "An error occurred generating the detailed analysis.",
+            history: "Context unavailable.",
+            linguistics: "Linguistic analysis unavailable.",
+            keyWords: []
         };
     }
 };
@@ -151,7 +203,6 @@ export async function decodeAudioData(
   // Gemini 2.5 TTS/Live usually returns mono 24kHz PCM
   const numChannels = 1;
   // If the header is missing, we assume raw PCM. 
-  // However, sometimes it wraps in a container. 
   // For raw PCM from the provided snippets:
   const frameCount = dataInt16.length / numChannels;
   const buffer = ctx.createBuffer(numChannels, frameCount, 24000);

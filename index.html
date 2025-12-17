@@ -4,14 +4,18 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>NurQuran Pulse</title>
+    <!-- We keep Tailwind CDN for simplicity in this specific setup -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com" rel="preconnect"/>
     <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+Arabic:wght@400;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+Arabic:wght@400;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Lexend:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
     <style>
       body {
-        font-family: 'Inter', sans-serif;
+        font-family: 'Plus Jakarta Sans', sans-serif;
+      }
+      .font-display {
+        font-family: 'Lexend', sans-serif;
       }
       .font-arabic {
         font-family: 'Noto Sans Arabic', sans-serif;
@@ -24,6 +28,20 @@
           -ms-overflow-style: none;
           scrollbar-width: none;
       }
+      .glass-panel {
+          background: rgba(30, 41, 59, 0.4);
+          backdrop-filter: blur(12px);
+          -webkit-backdrop-filter: blur(12px);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+      /* Animation Utilities */
+      @keyframes fadeInUp {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+      }
+      .animate-fade-in-up {
+          animation: fadeInUp 0.5s ease-out forwards;
+      }
     </style>
     <script>
         tailwind.config = {
@@ -31,23 +49,39 @@
             theme: {
                 extend: {
                     colors: {
-                        "primary": "#38BDF8", // Sky Blue 400 - Brighter for the navy background
-                        "secondary": "#94a3b8", // Slate 400
-                        
-                        // Theme extracted from Image
-                        "background-dark": "#040E1E", // Deep Midnight Navy
-                        "surface-dark": "#0B1A34", // Dark Royal Blue
-                        "surface-card": "#112545", // Lighter Blue for inputs/cards
-                        "surface-hover": "#1a3050", // Hover state
-                        "border-color": "#1E3A5F", // Blue-grey borders
+                        // Original Palette
+                        "background-dark": "#060D17", 
+                        "surface-dark": "#0F1A2E",
+                        "surface-card": "#162440",
+                        "surface-hover": "#1E3050",
+                        "primary": "#0EA5E9", 
+                        "primary-glow": "#38BDF8",
+                        "secondary": "#94A3B8",
+                        "border-color": "#1E293B",
+
+                        // New Pulse Palette (Merged)
+                        "pulse-primary": "#4285F4",
+                        "pulse-primary-dark": "#3367D6",
+                        "pulse-bg": "#0D182E",
+                        "pulse-surface": "#1A2B42",
+                        "pulse-surface-darker": "#112035",
+                        "pulse-border": "#374966",
+                        "pulse-text-light": "#A7C7E7",
                     },
                     fontFamily: {
-                        "display": ["Inter", "sans-serif"],
+                        "display": ["Lexend", "sans-serif"],
+                        "sans": ["Plus Jakarta Sans", "sans-serif"],
                         "arabic": ["'Noto Sans Arabic'", "sans-serif"],
                     },
                     boxShadow: {
-                        'neon': '0 0 20px rgba(56, 189, 248, 0.15)',
-                        'glass': '0 8px 32px 0 rgba(0, 0, 0, 0.37)',
+                        'neon': '0 0 25px rgba(14, 165, 233, 0.25)',
+                        'neon-sm': '0 0 15px rgba(14, 165, 233, 0.2)',
+                        'card': '0 8px 32px rgba(0, 0, 0, 0.3)',
+                        'glow': '0 0 40px -10px rgba(66, 133, 244, 0.15)',
+                    },
+                    backgroundImage: {
+                        'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
+                        'hero-glow': 'conic-gradient(from 180deg at 50% 50%, #0F1A2E 0deg, #060D17 180deg, #0F1A2E 360deg)',
                     }
                 },
             },
@@ -56,17 +90,20 @@
   <script type="importmap">
 {
   "imports": {
-    "react-markdown": "https://esm.sh/react-markdown@^10.1.0",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "@google/genai": "https://esm.sh/@google/genai@^1.33.0",
     "react/": "https://esm.sh/react@^19.2.3/",
     "react": "https://esm.sh/react@^19.2.3",
-    "@google/genai": "https://esm.sh/@google/genai@^1.33.0",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2"
+    "react-markdown": "https://esm.sh/react-markdown@^10.1.0",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@^2.88.0",
+    "vite": "https://esm.sh/vite@^7.3.0"
   }
 }
 </script>
 </head>
   <body class="bg-background-dark text-white h-screen overflow-hidden selection:bg-primary selection:text-background-dark">
     <div id="root" class="h-full"></div>
+    <script type="module" src="/index.tsx"></script>
   </body>
 </html>
