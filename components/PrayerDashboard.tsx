@@ -205,12 +205,12 @@ export const PrayerDashboard: React.FC = () => {
     return (
         <div className="w-full space-y-6">
             
-            {/* --- DYNAMIC SKY HERO CARD (Updated Colors) --- */}
+            {/* --- DYNAMIC SKY HERO CARD (Planetary Palette) --- */}
             <div className={`relative w-full h-[320px] rounded-[40px] overflow-hidden shadow-2xl transition-all duration-1000 group border border-white/5
-                ${skyPhase === 'night' ? 'bg-gradient-to-b from-[#060D17] via-[#0F1A2E] to-[#1E3050]' : ''}
-                ${skyPhase === 'dawn' ? 'bg-gradient-to-b from-[#0F1A2E] via-[#1E3050] to-[#38BDF8]' : ''}
-                ${skyPhase === 'day' ? 'bg-gradient-to-b from-[#38BDF8] to-[#BAE6FD]' : ''}
-                ${skyPhase === 'dusk' ? 'bg-gradient-to-b from-[#1E3050] via-[#0F1A2E] to-[#F97316]' : ''}
+                ${skyPhase === 'night' ? 'bg-gradient-to-b from-[#081F5C] via-[#0D2566] to-[#1E3A75]' : ''} /* Galaxy to Surface */
+                ${skyPhase === 'dawn' ? 'bg-gradient-to-b from-[#0D2566] via-[#1E3A75] to-[#7096D1]' : ''} /* Surface to Universe */
+                ${skyPhase === 'day' ? 'bg-gradient-to-b from-[#7096D1] to-[#BAD6EB]' : ''} /* Universe to Venus */
+                ${skyPhase === 'dusk' ? 'bg-gradient-to-b from-[#1E3A75] via-[#081F5C] to-[#334EAC]' : ''} /* Surface to Planetary */
             `}>
                 
                 {/* Elements */}
@@ -220,9 +220,9 @@ export const PrayerDashboard: React.FC = () => {
                 {(skyPhase === 'night' || skyPhase === 'dawn') && <Moon />}
                 {(skyPhase === 'day' || skyPhase === 'dusk') && <Sun />}
 
-                <Mountain className={`${skyPhase === 'day' ? 'text-[#7DD3FC]' : 'text-[#1E3050]'} opacity-50 bottom-0`} />
-                <Mountain className={`${skyPhase === 'day' ? 'text-[#38BDF8]' : 'text-[#0F1A2E]'} opacity-80 bottom-[-20px] scale-110`} />
-                <Mountain className={`${skyPhase === 'day' ? 'text-[#0EA5E9]' : 'text-[#060D17]'} opacity-100 bottom-[-40px] scale-125`} />
+                <Mountain className={`${skyPhase === 'day' ? 'text-[#D0E3FF]' : 'text-[#1E3A75]'} opacity-50 bottom-0`} />
+                <Mountain className={`${skyPhase === 'day' ? 'text-[#BAD6EB]' : 'text-[#0D2566]'} opacity-80 bottom-[-20px] scale-110`} />
+                <Mountain className={`${skyPhase === 'day' ? 'text-[#7096D1]' : 'text-[#081F5C]'} opacity-100 bottom-[-40px] scale-125`} />
 
                 {/* Content */}
                 <div className="absolute inset-0 p-8 flex flex-col justify-between z-10">
@@ -237,18 +237,18 @@ export const PrayerDashboard: React.FC = () => {
                             {/* Main Countdown */}
                             <div className="space-y-1">
                                 <h2 className="text-6xl font-bold text-white drop-shadow-md tracking-tight">{nextPrayerName}</h2>
-                                <p className="text-xl text-blue-100 font-medium opacity-90">in {timeToNext}</p>
+                                <p className="text-xl text-primary font-medium opacity-90">in {timeToNext}</p>
                             </div>
 
                             {/* Progress Bar */}
                             <div className="mt-6 w-full max-w-[200px] space-y-2">
-                                <div className="flex justify-between text-[10px] text-blue-100 font-bold uppercase tracking-wider">
+                                <div className="flex justify-between text-[10px] text-primary font-bold uppercase tracking-wider">
                                     <span>{currentPrayerName}</span>
                                     <span>{Math.round(progressPct)}%</span>
                                 </div>
                                 <div className="h-1.5 w-full bg-white/20 rounded-full overflow-hidden">
                                     <div 
-                                        className="h-full bg-white shadow-[0_0_10px_white] transition-all duration-1000 ease-out" 
+                                        className="h-full bg-primary shadow-[0_0_10px_#BAD6EB] transition-all duration-1000 ease-out" 
                                         style={{ width: `${progressPct}%` }}
                                     ></div>
                                 </div>
@@ -274,10 +274,10 @@ export const PrayerDashboard: React.FC = () => {
                             <p className="text-5xl font-light text-white font-display opacity-90 tracking-tighter">
                                 {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </p>
-                            <p className="text-xs text-blue-200 uppercase tracking-widest mt-1 font-bold opacity-80">{prayerTimes.date}</p>
+                            <p className="text-xs text-primary uppercase tracking-widest mt-1 font-bold opacity-80">{prayerTimes.date}</p>
                          </div>
                          <div className="text-right">
-                            <p className="text-sm text-blue-200 font-arabic bg-black/20 px-4 py-2 rounded-xl backdrop-blur-sm border border-white/5">
+                            <p className="text-sm text-primary font-arabic bg-black/20 px-4 py-2 rounded-xl backdrop-blur-sm border border-white/5">
                                 {prayerTimes.hijri}
                             </p>
                          </div>

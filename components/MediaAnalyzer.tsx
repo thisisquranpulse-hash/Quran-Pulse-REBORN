@@ -1,12 +1,22 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { analyzeMedia, transcribeAudio, decodeAudioData, searchHadith } from '../services/geminiService';
 import { getAllCachedMetadata, getAudio, deleteAudio, CachedMetadata } from '../services/audioCache';
+import { supabase } from '../services/supabaseClient';
 import { AudioLog } from '../types';
 import ReactMarkdown from 'react-markdown';
 
 interface MediaAnalyzerProps {
   logs: AudioLog[];
   onLogUpdate: (log: AudioLog) => void;
+}
+
+interface CloudRecording {
+    id: string;
+    user_text: string;
+    created_at: string;
+    audio_base64?: string; // Assuming base64 storage for simplicity, or url
+    audio_url?: string;
+    size?: number;
 }
 
 export const MediaAnalyzer: React.FC<MediaAnalyzerProps> = ({ logs, onLogUpdate }) => {
@@ -16,13 +26,22 @@ export const MediaAnalyzer: React.FC<MediaAnalyzerProps> = ({ logs, onLogUpdate 
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const [hadithQuery, setHadithQuery] = useState('');
   
-  // Cached Audio State
+  // Library State
+  const [libraryTab, setLibraryTab] = useState<'local' | 'cloud'>('local');
+  
+  // Cached Audio State (Local TTS)
   const [cachedItems, setCachedItems] = useState<CachedMetadata[]>([]);
-  const [playingCacheId, setPlayingCacheId] = useState<number | null>(null);
+  const [playingCacheId, setPlayingCacheId] = useState<number | string | null>(null);
+  
+  // Cloud Audio State (Conversations)
+  const [cloudItems, setCloudItems] = useState<CloudRecording[]>([]);
+  const [loadingCloud, setLoadingCloud] = useState(false);
+
   const audioContextRef = useRef<AudioContext | null>(null);
 
   useEffect(() => {
     loadCacheList();
+    loadCloudRecordings();
     audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
   }, []);
 
@@ -31,11 +50,48 @@ export const MediaAnalyzer: React.FC<MediaAnalyzerProps> = ({ logs, onLogUpdate 
       setCachedItems(items);
   };
 
-  const handlePlayCached = async (id: number) => {
-      if (playingCacheId === id) return;
+  const loadCloudRecordings = async () => {
+      setLoadingCloud(true);
       try {
-          const base64 = await getAudio(id);
-          if (base64 && audioContextRef.current) {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user) return;
+
+          const { data, error } = await supabase
+            .from('ai_conversations')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false });
+
+          if (error) throw error;
+          
+          if (data) {
+              // Map data and calculate approximate size if not provided
+              const mapped = data.map((item: any) => ({
+                  id: item.id,
+                  user_text: item.user_text || "Voice Recording",
+                  created_at: item.created_at,
+                  audio_base64: item.audio_blob, // Assuming column name is audio_blob or similar
+                  size: item.audio_blob ? Math.round((item.audio_blob.length * 3) / 4) : 0
+              }));
+              setCloudItems(mapped);
+          }
+      } catch (e) {
+          console.error("Failed to load cloud recordings", e);
+      } finally {
+          setLoadingCloud(false);
+      }
+  };
+
+  const handlePlayAudio = async (id: number | string, base64: string | undefined) => {
+      if (playingCacheId === id) return;
+      if (!base64) return;
+
+      try {
+          if (audioContextRef.current?.state === 'suspended') {
+              await audioContextRef.current.resume();
+          }
+
+          if (audioContextRef.current) {
               setPlayingCacheId(id);
               const buffer = await decodeAudioData(base64, audioContextRef.current);
               const source = audioContextRef.current.createBufferSource();
@@ -50,14 +106,38 @@ export const MediaAnalyzer: React.FC<MediaAnalyzerProps> = ({ logs, onLogUpdate 
       }
   };
 
+  const handlePlayCached = async (id: number) => {
+      const base64 = await getAudio(id);
+      handlePlayAudio(id, base64);
+  };
+
+  const handlePlayCloud = (item: CloudRecording) => {
+      if (item.audio_base64) {
+          handlePlayAudio(item.id, item.audio_base64);
+      }
+  };
+
   const handleDeleteCached = async (id: number) => {
-      if (confirm("Delete this saved audio?")) {
+      if (confirm("Delete this saved audio from local cache?")) {
           await deleteAudio(id);
           loadCacheList();
       }
   };
 
-  const formatBytes = (bytes: number) => {
+  const handleDeleteCloud = async (id: string) => {
+      if (confirm("Delete this recording from the cloud?")) {
+          try {
+            const { error } = await supabase.from('ai_conversations').delete().eq('id', id);
+            if (error) throw error;
+            loadCloudRecordings();
+          } catch (e) {
+              alert("Failed to delete recording.");
+              console.error(e);
+          }
+      }
+  };
+
+  const formatBytes = (bytes: number | undefined) => {
       if (!bytes) return '0 B';
       const k = 1024;
       const sizes = ['B', 'KB', 'MB'];
@@ -98,13 +178,33 @@ export const MediaAnalyzer: React.FC<MediaAnalyzerProps> = ({ logs, onLogUpdate 
             setLoading(true);
             try {
                 const text = await transcribeAudio(blob);
-                onLogUpdate({
-                    id: crypto.randomUUID(),
-                    timestamp: Date.now(),
-                    type: 'transcription',
-                    userText: text,
-                    audioUrl: URL.createObjectURL(blob)
-                });
+                
+                // Helper to convert blob to base64 for saving
+                const reader = new FileReader();
+                reader.onloadend = async () => {
+                     const base64Audio = (reader.result as string).split(',')[1];
+                     
+                     // Optional: Auto-save to cloud if needed
+                     // const { data: { user } } = await supabase.auth.getUser();
+                     // if(user) {
+                     //    await supabase.from('ai_conversations').insert({
+                     //        user_id: user.id,
+                     //        user_text: text,
+                     //        audio_blob: base64Audio
+                     //    });
+                     //    loadCloudRecordings();
+                     // }
+
+                     onLogUpdate({
+                        id: crypto.randomUUID(),
+                        timestamp: Date.now(),
+                        type: 'transcription',
+                        userText: text,
+                        audioUrl: URL.createObjectURL(blob)
+                    });
+                };
+                reader.readAsDataURL(blob);
+
             } catch (e) {
                 console.error(e);
                 alert("Transcription failed");
@@ -271,47 +371,120 @@ export const MediaAnalyzer: React.FC<MediaAnalyzerProps> = ({ logs, onLogUpdate 
                 </div>
             </div>
 
-            {/* Saved Audio Library */}
+            {/* Audio Library (Tabs) */}
             <div className="bg-surface-card/50 backdrop-blur-md rounded-3xl border border-white/10 overflow-hidden flex flex-col h-[300px] shadow-lg">
                 <div className="p-4 border-b border-white/10 bg-background-dark/30 flex justify-between items-center">
                     <h3 className="font-bold text-white text-sm uppercase tracking-wide">Audio Library</h3>
-                    <button onClick={loadCacheList} className="text-[10px] text-primary hover:text-white uppercase tracking-wider">Refresh</button>
+                    <div className="flex gap-2 bg-background-dark/50 p-1 rounded-lg">
+                        <button 
+                            onClick={() => setLibraryTab('local')}
+                            className={`px-3 py-1 text-[10px] font-bold rounded-md transition-all ${libraryTab === 'local' ? 'bg-primary text-background-dark' : 'text-slate-400 hover:text-white'}`}
+                        >
+                            Local Cache
+                        </button>
+                        <button 
+                            onClick={() => setLibraryTab('cloud')}
+                            className={`px-3 py-1 text-[10px] font-bold rounded-md transition-all ${libraryTab === 'cloud' ? 'bg-primary text-background-dark' : 'text-slate-400 hover:text-white'}`}
+                        >
+                            Cloud
+                        </button>
+                    </div>
                 </div>
+                
                 <div className="flex-1 overflow-y-auto p-4 space-y-2 no-scrollbar">
-                    {cachedItems.length === 0 && (
-                        <div className="text-center text-slate-500 p-4 text-xs">
-                            <p>No audio saved.</p>
-                        </div>
-                    )}
-                    {cachedItems.map(item => (
-                        <div key={item.id} className="flex items-center justify-between p-3 bg-background-dark/50 rounded-xl border border-white/5 hover:border-primary/30 transition-colors">
-                            <div className="flex-1 mr-4">
-                                <div className="flex items-center gap-2 mb-1">
-                                    <span className="text-[10px] font-bold bg-primary/20 text-primary px-2 py-0.5 rounded-full border border-primary/20">
-                                        {item.verseKey}
-                                    </span>
-                                    <span className="text-[10px] text-slate-500">
-                                        {formatBytes(item.size)}
-                                    </span>
+                    {/* LOCAL CACHE TAB */}
+                    {libraryTab === 'local' && (
+                        <>
+                            {cachedItems.length === 0 && (
+                                <div className="text-center text-slate-500 p-4 text-xs">
+                                    <p>No local audio saved.</p>
                                 </div>
-                                <p className="text-xs text-slate-400 line-clamp-1">{item.text}</p>
+                            )}
+                            {cachedItems.map(item => (
+                                <div key={item.id} className="flex items-center justify-between p-3 bg-background-dark/50 rounded-xl border border-white/5 hover:border-primary/30 transition-colors">
+                                    <div className="flex-1 mr-4">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <span className="text-[10px] font-bold bg-primary/20 text-primary px-2 py-0.5 rounded-full border border-primary/20">
+                                                {item.verseKey}
+                                            </span>
+                                            <span className="text-[10px] text-slate-500">
+                                                {formatBytes(item.size)}
+                                            </span>
+                                        </div>
+                                        <p className="text-xs text-slate-400 line-clamp-1">{item.text}</p>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <button 
+                                            onClick={() => handlePlayCached(item.id)}
+                                            className={`p-2 rounded-full transition-colors ${playingCacheId === item.id ? 'bg-primary text-background-dark' : 'bg-white/10 text-slate-300 hover:bg-white hover:text-background-dark'}`}
+                                        >
+                                            <span className="material-symbols-outlined text-[16px]">{playingCacheId === item.id ? 'graphic_eq' : 'play_arrow'}</span>
+                                        </button>
+                                        <button 
+                                            onClick={() => handleDeleteCached(item.id)}
+                                            className="p-2 rounded-full bg-white/5 text-slate-500 hover:bg-red-500/20 hover:text-red-400 transition-colors"
+                                        >
+                                            <span className="material-symbols-outlined text-[16px]">delete</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </>
+                    )}
+
+                    {/* CLOUD RECORDINGS TAB */}
+                    {libraryTab === 'cloud' && (
+                        <>
+                            <div className="flex justify-end mb-2">
+                                <button onClick={loadCloudRecordings} className="text-[10px] text-primary hover:text-white uppercase tracking-wider font-bold">Refresh List</button>
                             </div>
-                            <div className="flex gap-2">
-                                <button 
-                                    onClick={() => handlePlayCached(item.id)}
-                                    className={`p-2 rounded-full transition-colors ${playingCacheId === item.id ? 'bg-primary text-background-dark' : 'bg-white/10 text-slate-300 hover:bg-white hover:text-background-dark'}`}
-                                >
-                                    <span className="material-symbols-outlined text-[16px]">{playingCacheId === item.id ? 'graphic_eq' : 'play_arrow'}</span>
-                                </button>
-                                <button 
-                                    onClick={() => handleDeleteCached(item.id)}
-                                    className="p-2 rounded-full bg-white/5 text-slate-500 hover:bg-red-500/20 hover:text-red-400 transition-colors"
-                                >
-                                    <span className="material-symbols-outlined text-[16px]">delete</span>
-                                </button>
-                            </div>
-                        </div>
-                    ))}
+                            
+                            {loadingCloud ? (
+                                <div className="text-center p-4">
+                                    <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto"></div>
+                                </div>
+                            ) : cloudItems.length === 0 ? (
+                                <div className="text-center text-slate-500 p-4 text-xs">
+                                    <p>No cloud recordings found.</p>
+                                    <p className="mt-1 opacity-50">Saved conversations will appear here.</p>
+                                </div>
+                            ) : (
+                                cloudItems.map(item => (
+                                    <div key={item.id} className="flex items-center justify-between p-3 bg-surface-card/30 rounded-xl border border-white/5 hover:border-purple-500/30 transition-colors">
+                                        <div className="flex-1 mr-4">
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <span className="text-[10px] font-bold bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded-full border border-purple-500/20">
+                                                    Voice Note
+                                                </span>
+                                                <span className="text-[10px] text-slate-500">
+                                                    {new Date(item.created_at).toLocaleDateString()}
+                                                </span>
+                                                <span className="text-[10px] text-slate-600">
+                                                    {formatBytes(item.size)}
+                                                </span>
+                                            </div>
+                                            <p className="text-xs text-slate-300 line-clamp-1 italic">"{item.user_text}"</p>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <button 
+                                                onClick={() => handlePlayCloud(item)}
+                                                disabled={!item.audio_base64}
+                                                className={`p-2 rounded-full transition-colors ${playingCacheId === item.id ? 'bg-purple-500 text-white' : 'bg-white/10 text-slate-300 hover:bg-white hover:text-background-dark'} disabled:opacity-30`}
+                                            >
+                                                <span className="material-symbols-outlined text-[16px]">{playingCacheId === item.id ? 'graphic_eq' : 'play_arrow'}</span>
+                                            </button>
+                                            <button 
+                                                onClick={() => handleDeleteCloud(item.id)}
+                                                className="p-2 rounded-full bg-white/5 text-slate-500 hover:bg-red-500/20 hover:text-red-400 transition-colors"
+                                            >
+                                                <span className="material-symbols-outlined text-[16px]">delete</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                        </>
+                    )}
                 </div>
             </div>
 

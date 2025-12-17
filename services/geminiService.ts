@@ -1,4 +1,6 @@
+
 import { GoogleGenAI, Modality, Type, FunctionDeclaration } from "@google/genai";
+import { AssistantMode } from "../types";
 
 // Helper to get AI instance safely
 export const getAiClient = () => {
@@ -8,401 +10,340 @@ export const getAiClient = () => {
   return new GoogleGenAI({ apiKey: process.env.API_KEY });
 };
 
-// --- LOCATION SERVICES (New) ---
-export const identifyLocation = async (lat: number, lng: number) => {
-  const ai = getAiClient();
-  try {
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: `
-        You are a location detector. 
-        1. Identify the specific City/District and State name for coordinates: ${lat}, ${lng}.
-        2. Find 3 nearest Mosques (Masjid) within 10km.
-        
-        Strictly follow this output format:
-        LOCATION: [City Name], [State]
-        MOSQUES:
-        - [Masjid Name]
-        - [Masjid Name]
-        - [Masjid Name]
-        `,
-        config: {
-          tools: [{ googleMaps: {} }],
-          toolConfig: {
-            retrievalConfig: {
-              latLng: { latitude: lat, longitude: lng }
-            }
-          }
-        }
-      });
-      
-      return {
-        text: response.text || "",
-        chunks: response.candidates?.[0]?.groundingMetadata?.groundingChunks || []
-      };
-  } catch (e) {
-      console.error("Location ID failed", e);
-      return { text: "", chunks: [] };
-  }
+// Helper to sanitize JSON string from model output
+const sanitizeJson = (text: string) => {
+    let cleaned = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    cleaned = cleaned.replace(/,(\s*[}\]])/g, '$1');
+    return cleaned;
 };
 
-// --- IQRA AI FEEDBACK ENGINE (New) ---
-export const analyzeIqraReading = async (audioBlob: Blob, expectedText: string, level: number) => {
-    const ai = getAiClient();
-    const reader = new FileReader();
-    
-    return new Promise<any>((resolve, reject) => {
-        reader.onloadend = async () => {
-            const base64data = (reader.result as string).split(',')[1];
-            
-            const prompt = `
-            Act as a strict Quranic Tajwid Teacher for a student learning IQRA Level ${level}.
-            The student is expected to read: "${expectedText}".
-            
-            Analyze the audio provided.
-            
-            Output JSON ONLY:
-            {
-                "recognized_text": "What you heard",
-                "accuracy_score": 0-100,
-                "feedback_bm": "Constructive feedback in Bahasa Melayu. Focus on Makhraj and Harakat.",
-                "is_correct": boolean (true if score > 80)
-            }
-            `;
-
-            try {
-                const response = await ai.models.generateContent({
-                    model: 'gemini-2.5-flash',
-                    contents: {
-                        parts: [
-                            { inlineData: { mimeType: audioBlob.type, data: base64data } },
-                            { text: prompt }
-                        ]
-                    },
-                    config: { responseMimeType: "application/json" }
-                });
-                resolve(JSON.parse(response.text || "{}"));
-            } catch (e) {
-                console.error("Iqra Analysis Error", e);
-                // Fallback mock for demo if API fails
-                resolve({
-                    recognized_text: expectedText,
-                    accuracy_score: 85,
-                    feedback_bm: "Bacaan anda baik, teruskan usaha. Jaga panjang pendek.",
-                    is_correct: true
-                });
-            }
-        };
-        reader.readAsDataURL(audioBlob);
+// Helper to convert File/Blob to base64
+const fileToBase64 = (file: File | Blob): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve((reader.result as string).split(',')[1]);
+        reader.onerror = error => reject(error);
     });
 };
 
-// --- Verse Insight (Verse Studio) ---
-export const generateVerseInsight = async (arabic: string, translation: string, verseKey: string) => {
-    const ai = getAiClient();
-    const prompt = `
-    Analyze this Quranic Verse for "Pulse Verse Studio". Provide a comprehensive, scholarly analysis suitable for a student of knowledge.
+const blobToBase64 = fileToBase64;
 
-    Verse: ${verseKey}
-    Arabic: ${arabic}
-    Translation: ${translation}
-
-    Instructions:
-    1. **Core Theme**: A powerful, concise title.
-    2. **Tafsir**: A deep explanation of the meaning (Tafsir Jalalayn/Ibn Kathir style).
-    3. **Historical Context**: Explain the Asbab al-Nuzul (Reason for revelation) or the context (Makki/Madani).
-    4. **Linguistic Analysis**: Analyze the Balaghah (Rhetoric), Nahw (Grammar), or imagery used in the Arabic text.
-    5. **Key Words**: Select 3 specific Arabic root words from the verse and explain their deep meaning.
-
-    Output JSON format ONLY:
-    {
-        "coreTheme": "string",
-        "tafsir": "string",
-        "history": "string (Detailed historical context or Asbab al-Nuzul)",
-        "linguistics": "string (Detailed analysis of rhetoric and grammar)",
-        "keyWords": [
-            { "word": "Arabic Word", "meaning": "Deep definition" },
-            { "word": "Arabic Word", "meaning": "Deep definition" },
-            { "word": "Arabic Word", "meaning": "Deep definition" }
-        ]
-    }
-    `;
-
-    try {
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: { parts: [{ text: prompt }] },
-            config: {
-                responseMimeType: "application/json"
-            }
-        });
-        return JSON.parse(response.text || "{}");
-    } catch (e) {
-        console.error("Insight Error", e);
-        return {
-            coreTheme: "Divine Wisdom",
-            tafsir: "An error occurred generating the detailed analysis.",
-            history: "Context unavailable.",
-            linguistics: "Linguistic analysis unavailable.",
-            keyWords: []
-        };
-    }
-};
-
-// --- TTS Service ---
-export const generateMalaySpeech = async (text: string, voiceName: string = 'Charon') => {
-  const ai = getAiClient();
-  
-  // Enhanced prompt for "Storytelling Guru" persona
-  const refinedPrompt = `
-    Anda adalah seorang Guru Al-Quran dan Ustaz yang sangat fasih berbahasa Melayu standard (Baku). 
-    
-    Tugasan:
-    Bacakan terjemahan ayat Al-Quran di bawah dengan gaya "bercerita" (storytelling/naratif) untuk menarik minat pendengar.
-
-    Panduan Nada & Sebutan:
-    1.  **Gaya Bercerita**: Jangan baca seperti robot atau berita. Baca seolah-olah anda sedang menceritakan kisah benar kepada anak murid di dalam kelas.
-    2.  **Emosi & Penghayatan**: Gunakan intonasi yang hidup. Berhenti seketika (pause) pada tanda koma untuk memberi kesan dramatik.
-    3.  **Sebutan (Pronunciation)**: Sebut setiap perkataan dengan jelas, terang, dan fasih.
-    4.  **Pesona**: Suara yang tenang, bijaksana, memujuk, dan berwibawa.
-
-    Teks Terjemahan untuk dibaca:
-    "${text}"
-  `;
-
-  const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash-preview-tts",
-    contents: [{ parts: [{ text: refinedPrompt }] }],
-    config: {
-      responseModalities: [Modality.AUDIO],
-      speechConfig: {
-        voiceConfig: {
-          prebuiltVoiceConfig: { voiceName },
-        },
-      },
-    },
-  });
-
-  const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-  return base64Audio;
-};
-
-// --- Audio Decoding Helper ---
+// Audio Decoding Helper for Raw PCM
 export async function decodeAudioData(
   base64: string,
-  ctx: AudioContext
+  ctx: AudioContext,
+  sampleRate: number = 24000,
+  numChannels: number = 1
 ): Promise<AudioBuffer> {
+    const data = decode(base64);
+    const dataInt16 = new Int16Array(data.buffer);
+    const frameCount = dataInt16.length / numChannels;
+    const buffer = ctx.createBuffer(numChannels, frameCount, sampleRate);
+
+    for (let channel = 0; channel < numChannels; channel++) {
+        const channelData = buffer.getChannelData(channel);
+        for (let i = 0; i < frameCount; i++) {
+            channelData[i] = dataInt16[i * numChannels + channel] / 32768.0;
+        }
+    }
+    return buffer;
+}
+
+// Base64 decoding helper
+function decode(base64: string) {
   const binaryString = atob(base64);
   const len = binaryString.length;
   const bytes = new Uint8Array(len);
   for (let i = 0; i < len; i++) {
     bytes[i] = binaryString.charCodeAt(i);
   }
-  
-  const dataInt16 = new Int16Array(bytes.buffer);
-  // Gemini 2.5 TTS/Live usually returns mono 24kHz PCM
-  const numChannels = 1;
-  // If the header is missing, we assume raw PCM. 
-  // For raw PCM from the provided snippets:
-  const frameCount = dataInt16.length / numChannels;
-  const buffer = ctx.createBuffer(numChannels, frameCount, 24000);
-
-  for (let channel = 0; channel < numChannels; channel++) {
-    const channelData = buffer.getChannelData(channel);
-    for (let i = 0; i < frameCount; i++) {
-      channelData[i] = dataInt16[i * numChannels + channel] / 32768.0;
-    }
-  }
-  return buffer;
+  return bytes;
 }
 
-// --- Transcription Service ---
-export const transcribeAudio = async (audioBlob: Blob) => {
+// --- DAILY REFLECTION ---
+export const generateDailyReflection = async () => {
   const ai = getAiClient();
-  const reader = new FileReader();
-  return new Promise<string>((resolve, reject) => {
-    reader.onloadend = async () => {
-      const base64data = (reader.result as string).split(',')[1];
-      try {
-        const response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash',
-          contents: {
-            parts: [
-              { inlineData: { mimeType: audioBlob.type, data: base64data } },
-              { text: "Transcribe this audio exactly as spoken." }
-            ]
-          }
-        });
-        resolve(response.text || "");
-      } catch (e) {
-        reject(e);
-      }
-    };
-    reader.readAsDataURL(audioBlob);
-  });
-};
+  const hour = new Date().getHours();
+  let timeOfDay = "siang";
+  if (hour < 5) timeOfDay = "tahajjud";
+  else if (hour < 7) timeOfDay = "fajr";
+  else if (hour < 12) timeOfDay = "pagi";
+  else if (hour < 15) timeOfDay = "zuhur";
+  else if (hour < 19) timeOfDay = "petang";
+  else timeOfDay = "malam";
 
-// --- Image Generation ---
-export const generateImage = async (prompt: string, aspectRatio: string, size: string) => {
-  const ai = getAiClient();
-  const response = await ai.models.generateContent({
-    model: 'gemini-3-pro-image-preview',
-    contents: { parts: [{ text: prompt }] },
-    config: {
-      imageConfig: {
-        aspectRatio: aspectRatio,
-        imageSize: size
-      }
-    }
-  });
-
-  // Extract images
-  const images: string[] = [];
-  if (response.candidates?.[0]?.content?.parts) {
-    for (const part of response.candidates[0].content.parts) {
-      if (part.inlineData) {
-        images.push(`data:image/png;base64,${part.inlineData.data}`);
-      }
-    }
+  try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: `Hasilkan satu mutiara kata atau refleksi Islamik yang sangat pendek (max 15 patah perkataan) yang sesuai untuk waktu ${timeOfDay}.
+        Tulis dalam Bahasa Melayu yang indah dan puitis. 
+        Hanya berikan teks sahaja tanpa tanda petikan.`,
+      });
+      return response.text?.trim() || "Zikir penenang hati, penghubung hamba dengan Ilahi.";
+  } catch (e) {
+      console.error("Reflection Error", e);
+      return "Cukuplah Allah bagiku, tiada Tuhan melainkan Dia.";
   }
-  return images;
 };
 
-// --- Veo Video Generation ---
-export const generateVideo = async (prompt: string, aspectRatio: string) => {
-  const ai = getAiClient(); 
-  
-  let operation = await ai.models.generateVideos({
-    model: 'veo-3.1-fast-generate-preview',
-    prompt: prompt,
-    config: {
-      numberOfVideos: 1,
-      resolution: '720p', // fast-generate supports 720p or 1080p
-      aspectRatio: aspectRatio // 16:9 or 9:16
+// --- CHAT RESPONSE ---
+export const getChatResponse = async (userMsg: string, mode: AssistantMode, history: any[], location?: {lat: number, lng: number}) => {
+    const ai = getAiClient();
+    let model = 'gemini-3-flash-preview';
+    const config: any = {
+        systemInstruction: "You are Ustaz Nur, a wise and friendly Islamic assistant. You provide answers based on authentic Quranic and Hadith sources. Be respectful and concise."
+    };
+
+    if (mode === AssistantMode.DEEP) {
+        model = 'gemini-3-pro-preview';
+        config.thinkingConfig = { thinkingBudget: 32768 };
+    } else if (mode === AssistantMode.FAST) {
+        model = 'gemini-flash-lite-latest';
+    } else if (mode === AssistantMode.SEARCH) {
+        config.tools = [{ googleSearch: {} }];
+    } else if (mode === AssistantMode.MAPS) {
+        model = 'gemini-2.5-flash-latest';
+        config.tools = [{ googleMaps: {} }];
+        if (location) {
+            config.toolConfig = {
+                retrievalConfig: {
+                    latLng: { latitude: location.lat, longitude: location.lng }
+                }
+            };
+        }
     }
-  });
 
-  return operation; // Component handles polling
+    const response = await ai.models.generateContent({
+        model,
+        contents: [...history, { role: 'user', parts: [{ text: userMsg }] }],
+        config
+    });
+
+    return response;
 };
 
-// --- Assistant (Tanya Ustaz - Updated for PRD) ---
-export const getChatResponse = async (
-  message: string, 
-  mode: 'FAST' | 'DEEP' | 'SEARCH' | 'MAPS',
-  history: any[],
-  location?: { lat: number; lng: number }
-) => {
-  const ai = getAiClient();
-  let model = 'gemini-2.5-flash';
-  let config: any = {};
-  
-  // PRD Requirement: JAKIM & Shafi'i alignment
-  const systemInstruction = `
-    You are Ustaz AI, an Islamic knowledge assistant for QuranPulse v6.0.
+// --- IMAGE GENERATION ---
+export const generateImage = async (prompt: string, aspectRatio: string, imageSize: string) => {
+    const ai = getAiClient();
+    // Upgrade to pro for high quality sizes
+    const model = (imageSize === '2K' || imageSize === '4K') ? 'gemini-3-pro-image-preview' : 'gemini-2.5-flash-image';
     
-    RULES:
-    1. Only answer questions related to Islam.
-    2. Cite Quran verses with Surah:Ayah format.
-    3. Reference authentic Hadith with collection and number.
-    4. For Malaysian-specific questions, reference JAKIM rulings and E-Fatwa Malaysia.
-    5. Always clarify if there are multiple scholarly opinions.
-    6. Never give medical, legal, or financial advice.
-    7. Default to Shafi'i madhab unless user specifies otherwise (Common in Malaysia).
-    8. Use respectful Bahasa Melayu or English based on user input.
+    const response = await ai.models.generateContent({
+        model,
+        contents: { parts: [{ text: prompt }] },
+        config: {
+            imageConfig: {
+                aspectRatio: aspectRatio as any,
+                imageSize: imageSize as any
+            }
+        }
+    });
     
-    RESPONSE FORMAT:
-    - Clear, respectful tone.
-    - Structure with bullet points if explaining steps.
-  `;
+    const images: string[] = [];
+    for (const part of response.candidates[0].content.parts) {
+        if (part.inlineData) {
+            images.push(`data:image/png;base64,${part.inlineData.data}`);
+        }
+    }
+    return images;
+};
 
-  if (mode === 'FAST') {
-    model = 'gemini-2.5-flash-lite-latest';
-  } else if (mode === 'DEEP') {
-    model = 'gemini-3-pro-preview';
-    config.thinkingConfig = { thinkingBudget: 32768 };
-  } else if (mode === 'SEARCH') {
-    model = 'gemini-2.5-flash';
-    config.tools = [{ googleSearch: {} }];
-  } else if (mode === 'MAPS') {
-    model = 'gemini-2.5-flash';
-    config.tools = [{ googleMaps: {} }];
-    if (location) {
-        config.toolConfig = {
-            retrievalConfig: {
-                latLng: {
-                    latitude: location.lat,
-                    longitude: location.lng
+// --- VIDEO GENERATION ---
+export const generateVideo = async (prompt: string, aspectRatio: '16:9' | '9:16') => {
+    const ai = getAiClient();
+    const operation = await ai.models.generateVideos({
+        model: 'veo-3.1-fast-generate-preview',
+        prompt,
+        config: {
+            numberOfVideos: 1,
+            resolution: '720p',
+            aspectRatio
+        }
+    });
+    return operation;
+};
+
+// --- MALAY SPEECH (TTS) ---
+export const generateMalaySpeech = async (text: string, voice: string = 'Kore') => {
+    const ai = getAiClient();
+    const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash-preview-tts",
+        contents: [{ parts: [{ text }] }],
+        config: {
+            responseModalities: [Modality.AUDIO],
+            speechConfig: {
+                voiceConfig: {
+                    prebuiltVoiceConfig: { voiceName: voice },
+                },
+            },
+        },
+    });
+    return response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+};
+
+// --- VERSE INSIGHTS ---
+export const generateVerseInsight = async (arabic: string, translation: string, key: string) => {
+    const ai = getAiClient();
+    const response = await ai.models.generateContent({
+        model: 'gemini-3-pro-preview',
+        contents: `Provide deep Islamic insight for verse ${key}. Arabic: ${arabic}. Translation: ${translation}. Include history, linguistic analysis of key words, core theme, and brief tafsir.`,
+        config: {
+            responseMimeType: 'application/json',
+            responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                    history: { type: Type.STRING },
+                    keyWords: {
+                        type: Type.ARRAY,
+                        items: {
+                            type: Type.OBJECT,
+                            properties: {
+                                word: { type: Type.STRING },
+                                meaning: { type: Type.STRING }
+                            },
+                            required: ['word', 'meaning']
+                        }
+                    },
+                    coreTheme: { type: Type.STRING },
+                    tafsir: { type: Type.STRING }
+                },
+                required: ['history', 'keyWords', 'coreTheme', 'tafsir']
+            }
+        }
+    });
+    return JSON.parse(sanitizeJson(response.text || "{}"));
+};
+
+// --- MEDIA ANALYSIS ---
+export const analyzeMedia = async (file: File, prompt: string, type: 'image' | 'video') => {
+    const ai = getAiClient();
+    const base64 = await fileToBase64(file);
+    const mimeType = file.type;
+
+    const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: {
+            parts: [
+                { inlineData: { data: base64, mimeType } },
+                { text: prompt }
+            ]
+        }
+    });
+    return response.text || "";
+};
+
+// --- TRANSCRIPTION ---
+export const transcribeAudio = async (blob: Blob) => {
+    const ai = getAiClient();
+    const base64 = await blobToBase64(blob);
+    const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: {
+            parts: [
+                { inlineData: { data: base64, mimeType: 'audio/webm' } },
+                { text: "Transcribe this audio precisely. If it is a Quranic recitation, identify the verse if possible." }
+            ]
+        }
+    });
+    return response.text || "";
+};
+
+// --- HADITH SEARCH ---
+export const searchHadith = async (query: string) => {
+    const ai = getAiClient();
+    const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: `Search for authentic Hadith regarding: ${query}. Provide the narration and source (e.g., Bukhari, Muslim).`,
+        config: {
+            tools: [{ googleSearch: {} }]
+        }
+    });
+    return {
+        text: response.text || "",
+        groundingChunks: response.candidates?.[0]?.groundingMetadata?.groundingChunks || []
+    };
+};
+
+// --- IQRA READING ANALYSIS ---
+export const analyzeIqraReading = async (audioBlob: Blob, expectedText: string, level: number) => {
+    const ai = getAiClient();
+    const base64Audio = await blobToBase64(audioBlob);
+    
+    const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: {
+            parts: [
+                { inlineData: { data: base64Audio, mimeType: 'audio/webm' } },
+                { text: `Analyze this Quranic/Iqra reading (Level ${level}). Expected text: "${expectedText}". Evaluate makhraj and tajwid. Respond in JSON format.` }
+            ]
+        },
+        config: {
+            responseMimeType: 'application/json',
+            responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                    is_correct: { type: Type.BOOLEAN },
+                    accuracy_score: { type: Type.NUMBER },
+                    feedback_bm: { type: Type.STRING }
+                },
+                required: ['is_correct', 'accuracy_score', 'feedback_bm']
+            }
+        }
+    });
+    
+    try {
+        return JSON.parse(sanitizeJson(response.text || "{}"));
+    } catch (e) {
+        return { is_correct: false, accuracy_score: 0, feedback_bm: "Gagal menganalisis bacaan." };
+    }
+};
+
+// --- IQRA PAGE GENERATION ---
+export const generateIqraPage = async (level: number) => {
+    const ai = getAiClient();
+    const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: `Generate a practice page for Iqra Level ${level}. Focus on appropriate rules for this level. Respond in JSON.`,
+        config: {
+            responseMimeType: 'application/json',
+            responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                    instruction: { type: Type.STRING },
+                    rows: { 
+                        type: Type.ARRAY, 
+                        items: { 
+                            type: Type.ARRAY, 
+                            items: { type: Type.STRING } 
+                        } 
+                    },
+                    expectedText: { type: Type.STRING }
+                },
+                required: ['instruction', 'rows', 'expectedText']
+            }
+        }
+    });
+    return JSON.parse(sanitizeJson(response.text || "{}"));
+};
+
+// --- IDENTIFY LOCATION & MOSQUES ---
+export const identifyLocation = async (lat: number, lng: number) => {
+    const ai = getAiClient();
+    const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash-latest",
+        contents: "Identify the current location and find nearby mosques for prayer. Respond with 'LOCATION: [Name]' and a list.",
+        config: {
+            tools: [{ googleMaps: {} }],
+            toolConfig: {
+                retrievalConfig: {
+                    latLng: { latitude: lat, longitude: lng }
                 }
             }
-        };
-    }
-  }
-
-  const chat = ai.chats.create({
-    model,
-    history,
-    config: {
-        ...config,
-        systemInstruction
-    }
-  });
-
-  const result = await chat.sendMessage({ message });
-  return result;
-};
-
-// --- Hadith Search ---
-export const searchHadith = async (query: string) => {
-  const ai = getAiClient();
-  const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash',
-    contents: `Find an authentic Hadith related to: "${query}". 
-    Quote the Hadith in Arabic (if found) and English/Malay. 
-    Cite the book and number (e.g. Sahih Bukhari 123).
-    Provide a brief explanation if needed.`,
-    config: {
-      tools: [{ googleSearch: {} }],
-    },
-  });
-  
-  return {
-    text: response.text || "No hadith found.",
-    groundingChunks: response.candidates?.[0]?.groundingMetadata?.groundingChunks
-  };
-};
-
-// --- Media Analysis ---
-export const analyzeMedia = async (
-    file: File, 
-    prompt: string, 
-    mediaType: 'image' | 'video'
-) => {
-    const ai = getAiClient();
-    const reader = new FileReader();
-    
-    return new Promise<string>((resolve, reject) => {
-        reader.onloadend = async () => {
-            const base64Data = (reader.result as string).split(',')[1];
-            const mimeType = file.type;
-            
-            try {
-                // Video and complex image understanding uses gemini-3-pro-preview
-                const model = 'gemini-3-pro-preview';
-                
-                const response = await ai.models.generateContent({
-                    model,
-                    contents: {
-                        parts: [
-                            { inlineData: { data: base64Data, mimeType } },
-                            { text: prompt }
-                        ]
-                    }
-                });
-                resolve(response.text || "");
-            } catch (err) {
-                reject(err);
-            }
-        };
-        reader.readAsDataURL(file);
+        }
     });
-}
+    return {
+        text: response.text || "",
+        chunks: response.candidates?.[0]?.groundingMetadata?.groundingChunks || []
+    };
+};

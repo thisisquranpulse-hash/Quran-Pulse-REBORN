@@ -12,11 +12,55 @@ interface QuranReaderProps {
 
 type ListMode = 'SURAH' | 'JUZ' | 'REVELATION';
 
+// --- SKELETON COMPONENTS ---
+const ChapterSkeleton = () => (
+    <div className="flex items-center justify-between p-4 rounded-2xl border border-white/5 bg-surface-card/20 animate-pulse h-[88px]">
+        <div className="flex items-center gap-4">
+            <div className="w-10 h-10 rounded-full bg-white/10"></div>
+            <div className="space-y-2">
+                <div className="w-32 h-4 bg-white/10 rounded"></div>
+                <div className="w-20 h-3 bg-white/5 rounded"></div>
+            </div>
+        </div>
+        <div className="flex flex-col items-end gap-2">
+            <div className="w-24 h-5 bg-white/10 rounded"></div>
+            <div className="w-16 h-3 bg-white/5 rounded"></div>
+        </div>
+    </div>
+);
+
+const VerseSkeleton = () => (
+    <div className="p-8 rounded-[32px] border border-white/5 bg-surface-card/20 animate-pulse">
+        {/* Actions Row */}
+        <div className="flex justify-between items-center mb-8 opacity-50">
+            <div className="w-16 h-6 bg-white/10 rounded-full"></div>
+            <div className="flex gap-1">
+                <div className="w-8 h-8 bg-white/10 rounded-full"></div>
+                <div className="w-8 h-8 bg-white/10 rounded-full"></div>
+                <div className="w-8 h-8 bg-white/10 rounded-full"></div>
+            </div>
+        </div>
+        {/* Arabic */}
+        <div className="w-full flex justify-end mb-10">
+            <div className="w-3/4 h-12 bg-white/10 rounded-xl"></div>
+        </div>
+        {/* Translation */}
+        <div className="space-y-4 max-w-2xl">
+            <div className="w-full h-4 bg-white/10 rounded"></div>
+            <div className="w-5/6 h-4 bg-white/10 rounded"></div>
+            <div className="w-1/2 h-3 bg-white/5 rounded mt-4"></div>
+        </div>
+    </div>
+);
+
 export const QuranReader: React.FC<QuranReaderProps> = ({ onLogUpdate }) => {
   // Data State
   const [chapters, setChapters] = useState<Surah[]>([]);
   const [juzs, setJuzs] = useState<Juz[]>([]);
   const [sortedChapters, setSortedChapters] = useState<Surah[]>([]);
+  
+  // Loading States
+  const [loadingChapters, setLoadingChapters] = useState(true);
   
   // Filter/Search State
   const [searchTerm, setSearchTerm] = useState('');
@@ -55,10 +99,12 @@ export const QuranReader: React.FC<QuranReaderProps> = ({ onLogUpdate }) => {
 
   useEffect(() => {
     // Initial Fetch
+    setLoadingChapters(true);
     Promise.all([fetchChapters(), fetchJuzs()]).then(([c, j]) => {
         setChapters(c);
         setJuzs(j);
         setSortedChapters(c); // Default order
+        setLoadingChapters(false);
     });
 
     audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
@@ -94,6 +140,16 @@ export const QuranReader: React.FC<QuranReaderProps> = ({ onLogUpdate }) => {
 
   // --- Logic ---
 
+  const saveProgress = (chapter: Surah, verseKey?: string) => {
+      const data = {
+          surahName: chapter.name_simple,
+          surahId: chapter.id,
+          verseKey: verseKey || `${chapter.id}:1`,
+          timestamp: Date.now()
+      };
+      localStorage.setItem('pulse_last_read', JSON.stringify(data));
+  };
+
   const handleChapterSelect = async (chapter: Surah) => {
     setSelectedChapter(chapter);
     setSelectedJuz(null);
@@ -103,6 +159,8 @@ export const QuranReader: React.FC<QuranReaderProps> = ({ onLogUpdate }) => {
     setVerses([]);
     setShowAi(false); // Reset AI view when reading starts
     
+    saveProgress(chapter); // Save basic progress on open
+
     // Reset Audio
     stopAllAudio();
     
@@ -150,6 +208,7 @@ export const QuranReader: React.FC<QuranReaderProps> = ({ onLogUpdate }) => {
   const openVerseStudio = async (verse: Verse) => {
       setStudioVerse(verse);
       setInsightLoading(true);
+      if(selectedChapter) saveProgress(selectedChapter, verse.verse_key);
       
       const malay = verse.translations.find(t => t.resource_id === 39)?.text.replace(/<[^>]*>?/gm, '') || "";
       const english = verse.translations.find(t => t.resource_id === 131)?.text.replace(/<[^>]*>?/gm, '') || "";
@@ -192,6 +251,8 @@ export const QuranReader: React.FC<QuranReaderProps> = ({ onLogUpdate }) => {
 
   const playArabicAudio = (verseKey: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
+    if(selectedChapter) saveProgress(selectedChapter, verseKey);
+
     const url = audioMap[verseKey];
     if (!url || !arabicAudioRef.current) return;
 
@@ -217,6 +278,8 @@ export const QuranReader: React.FC<QuranReaderProps> = ({ onLogUpdate }) => {
 
   const playTranslation = async (verse: Verse, e?: React.MouseEvent) => {
     e?.stopPropagation();
+    if(selectedChapter) saveProgress(selectedChapter, verse.verse_key);
+    
     const malayTranslation = verse.translations.find(t => t.resource_id === 39);
     if (!malayTranslation) return;
     
@@ -319,46 +382,67 @@ export const QuranReader: React.FC<QuranReaderProps> = ({ onLogUpdate }) => {
                 {/* GRID LIST VIEW */}
                 <div className={`absolute inset-0 overflow-y-auto no-scrollbar p-6 transition-opacity duration-500 ${!showAi ? 'opacity-100 z-10 pointer-events-auto' : 'opacity-0 z-0 pointer-events-none'}`}>
                     
+                    {/* Empty/Offline State */}
+                    {!loadingChapters && chapters.length === 0 && (
+                        <div className="h-full flex flex-col items-center justify-center text-center p-8 mt-10">
+                            <span className="material-symbols-outlined text-6xl text-slate-600 mb-4 animate-pulse">wifi_off</span>
+                            <h3 className="text-xl font-bold text-white mb-2">Offline Mode</h3>
+                            <p className="text-slate-400 max-w-md text-sm leading-relaxed">
+                                Unable to load Quran chapters. Please check your internet connection. 
+                                <br/><br/>
+                                If you have visited before, content might be cached but requires a refresh.
+                            </p>
+                            <button onClick={() => window.location.reload()} className="mt-6 px-6 py-3 bg-primary text-background-dark rounded-full font-bold shadow-neon-sm hover:scale-105 transition-transform">
+                                Retry Connection
+                            </button>
+                        </div>
+                    )}
+
                     {/* Quick Start Card (Compact) */}
-                    <div className="flex items-center justify-between p-6 bg-surface-card rounded-2xl border border-white/5 hover:border-primary/20 transition-all cursor-pointer mb-6 group" onClick={() => handleChapterSelect(chapters[0] || sortedChapters[0])}>
-                         <div className="flex items-center gap-4">
-                             <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-                                 <span className="material-symbols-outlined">auto_stories</span>
+                    {!loadingChapters && chapters.length > 0 && (
+                        <div className="flex items-center justify-between p-6 bg-surface-card rounded-2xl border border-white/5 hover:border-primary/20 transition-all cursor-pointer mb-6 group" onClick={() => handleChapterSelect(chapters[0] || sortedChapters[0])}>
+                             <div className="flex items-center gap-4">
+                                 <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                                     <span className="material-symbols-outlined">auto_stories</span>
+                                 </div>
+                                 <div>
+                                     <p className="text-xs text-secondary font-bold uppercase">Last Read</p>
+                                     <h3 className="font-bold text-white text-lg">Al-Fatihah</h3>
+                                 </div>
                              </div>
-                             <div>
-                                 <p className="text-xs text-secondary font-bold uppercase">Last Read</p>
-                                 <h3 className="font-bold text-white text-lg">Al-Fatihah</h3>
-                             </div>
-                         </div>
-                         <button className="w-10 h-10 rounded-full bg-surface-hover flex items-center justify-center text-white group-hover:bg-primary group-hover:text-background-dark transition-colors">
-                             <span className="material-symbols-outlined">play_arrow</span>
-                         </button>
-                    </div>
+                             <button className="w-10 h-10 rounded-full bg-surface-hover flex items-center justify-center text-white group-hover:bg-primary group-hover:text-background-dark transition-colors">
+                                 <span className="material-symbols-outlined">play_arrow</span>
+                             </button>
+                        </div>
+                    )}
 
                     {/* Grid List */}
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pb-20">
-                        {sortedChapters.map(surah => (
-                            <div 
-                                key={surah.id}
-                                onClick={() => handleChapterSelect(surah)}
-                                className="group flex items-center justify-between p-4 rounded-2xl border border-white/5 bg-surface-card/40 hover:bg-surface-card hover:border-primary/30 transition-all cursor-pointer shadow-sm"
-                            >
-                                <div className="flex items-center gap-4">
-                                    {/* Number Circle */}
-                                    <div className="w-10 h-10 rounded-full bg-surface-hover/50 border border-white/5 flex items-center justify-center group-hover:border-primary/50 transition-colors">
-                                        <span className="text-xs font-bold text-secondary group-hover:text-primary">{surah.id}</span>
+                        {loadingChapters 
+                            ? Array.from({length: 12}).map((_, i) => <ChapterSkeleton key={i} />)
+                            : sortedChapters.map(surah => (
+                                <div 
+                                    key={surah.id}
+                                    onClick={() => handleChapterSelect(surah)}
+                                    className="group flex items-center justify-between p-4 rounded-2xl border border-white/5 bg-surface-card/40 hover:bg-surface-card hover:border-primary/30 transition-all cursor-pointer shadow-sm"
+                                >
+                                    <div className="flex items-center gap-4">
+                                        {/* Number Circle */}
+                                        <div className="w-10 h-10 rounded-full bg-surface-hover/50 border border-white/5 flex items-center justify-center group-hover:border-primary/50 transition-colors">
+                                            <span className="text-xs font-bold text-secondary group-hover:text-primary">{surah.id}</span>
+                                        </div>
+                                        <div>
+                                            <h3 className="font-bold text-white text-sm group-hover:text-primary transition-colors">{surah.name_simple}</h3>
+                                            <p className="text-[10px] text-secondary uppercase tracking-wide">{surah.translated_name.name}</p>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <h3 className="font-bold text-white text-sm group-hover:text-primary transition-colors">{surah.name_simple}</h3>
-                                        <p className="text-[10px] text-secondary uppercase tracking-wide">{surah.translated_name.name}</p>
+                                    <div className="text-right">
+                                        <span className="font-arabic text-lg text-slate-300 group-hover:text-white transition-colors block">{surah.name_arabic}</span>
+                                        <span className="text-[10px] text-slate-600">{surah.verses_count} Ayahs</span>
                                     </div>
                                 </div>
-                                <div className="text-right">
-                                    <span className="font-arabic text-lg text-slate-300 group-hover:text-white transition-colors block">{surah.name_arabic}</span>
-                                    <span className="text-[10px] text-slate-600">{surah.verses_count} Ayahs</span>
-                                </div>
-                            </div>
-                        ))}
+                            ))
+                        }
                     </div>
                 </div>
             </div>
@@ -409,15 +493,15 @@ export const QuranReader: React.FC<QuranReaderProps> = ({ onLogUpdate }) => {
         <div className="max-w-4xl mx-auto px-4 md:px-8 py-10">
             
             {/* Bismillah */}
-            {selectedChapter && selectedChapter.id !== 9 && (
-                <div className="flex justify-center mb-12 opacity-80">
+            {selectedChapter && selectedChapter.id !== 9 && !loading && (
+                <div className="flex justify-center mb-12 opacity-80 animate-in fade-in slide-in-from-top-4 duration-700">
                      <Bismillah className="h-12 w-auto text-white/90" />
                 </div>
             )}
 
             {loading ? (
-                 <div className="flex flex-col items-center justify-center py-20 space-y-4">
-                     <div className="w-10 h-10 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+                 <div className="space-y-4">
+                     {Array.from({length: 4}).map((_, i) => <VerseSkeleton key={i} />)}
                  </div>
             ) : (
                 <div className="space-y-4">
@@ -467,8 +551,9 @@ export const QuranReader: React.FC<QuranReaderProps> = ({ onLogUpdate }) => {
                          <button 
                             onClick={loadMoreVerses}
                             disabled={loadingMore}
-                            className="bg-surface-card hover:bg-surface-hover text-white px-8 py-3 rounded-full text-sm font-bold transition-colors border border-white/10 shadow-lg"
+                            className="bg-surface-card hover:bg-surface-hover text-white px-8 py-3 rounded-full text-sm font-bold transition-colors border border-white/10 shadow-lg flex items-center gap-2"
                         >
+                             {loadingMore && <div className="w-4 h-4 border-2 border-white/50 border-t-white rounded-full animate-spin"></div>}
                              {loadingMore ? 'Loading...' : 'Load Next Page'}
                         </button>
                     </div>

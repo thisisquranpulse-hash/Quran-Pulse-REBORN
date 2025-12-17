@@ -2,7 +2,11 @@ import React, { useState } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { Logo } from './Logo';
 
-export const Login: React.FC = () => {
+interface LoginProps {
+    onGuestLogin: () => void;
+}
+
+export const Login: React.FC<LoginProps> = ({ onGuestLogin }) => {
   const [loading, setLoading] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
@@ -16,22 +20,42 @@ export const Login: React.FC = () => {
     setLoading(true);
     setMessage(null);
     
-    // Debugging: Log the redirect URL being used
     const redirectUrl = window.location.origin;
-    console.log("Google Login Redirect URL:", redirectUrl);
 
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
+      const { data, error } = await (supabase.auth as any).signInWithOAuth({
         provider: 'google',
         options: {
-          // PENTING: URL ini (contoh: http://localhost:5173) MESTI ada dalam "Redirect URLs" di Supabase Dashboard
           redirectTo: redirectUrl,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
         },
       });
+
       if (error) throw error;
+      
+      if (data?.url) {
+          window.location.href = data.url;
+      }
+
     } catch (error: any) {
       console.error("Google Login Error:", error);
-      setMessage({ type: 'error', text: error.message || "Google Login failed. Check console for details." });
+      
+      // Friendly Error Parsing with Specific Fix Instructions
+      let errorMsg = error.message || "Ralat tidak diketahui.";
+      let extraHelp = "";
+
+      if (errorMsg.includes("Redirect URL") || errorMsg.includes("mismatch")) {
+          errorMsg = "Pautan URL tidak dibenarkan oleh pelayan.";
+          extraHelp = "Sila gunakan 'Teruskan sebagai Tetamu' jika anda sedang menggunakan persekitaran Preview/Localhost.";
+      }
+      
+      setMessage({ 
+          type: 'error', 
+          text: `${errorMsg} ${extraHelp}`
+      });
       setLoading(false);
     }
   };
@@ -44,13 +68,13 @@ export const Login: React.FC = () => {
     try {
       if (isSignUp) {
         if (password !== confirmPassword) {
-            throw new Error("Passwords do not match");
+            throw new Error("Kata laluan tidak sepadan.");
         }
         if (!fullName.trim()) {
-            throw new Error("Please enter your full name");
+            throw new Error("Sila masukkan nama penuh anda.");
         }
 
-        const { error, data } = await supabase.auth.signUp({
+        const { error, data } = await (supabase.auth as any).signUp({
           email,
           password,
           options: {
@@ -61,12 +85,12 @@ export const Login: React.FC = () => {
         });
         if (error) throw error;
         if (data.user && !data.session) {
-             setMessage({ type: 'success', text: 'Signup successful! Please check your email.' });
+             setMessage({ type: 'success', text: 'Pendaftaran berjaya! Sila semak emel anda untuk pengesahan.' });
              setLoading(false);
              return;
         }
       } else {
-        const { error } = await supabase.auth.signInWithPassword({
+        const { error } = await (supabase.auth as any).signInWithPassword({
           email,
           password,
         });
@@ -95,7 +119,7 @@ export const Login: React.FC = () => {
             <div className="flex justify-between items-start mb-8">
                 <div>
                     <h1 className="text-3xl font-bold tracking-tight text-white mb-1">
-                        {isSignUp ? 'Sign up' : 'Log in'}
+                        {isSignUp ? 'Daftar' : 'Log Masuk'}
                     </h1>
                     <p className="text-primary text-[10px] font-mono tracking-widest uppercase">NurQuran Pulse</p>
                 </div>
@@ -103,7 +127,7 @@ export const Login: React.FC = () => {
                     onClick={() => { setIsSignUp(!isSignUp); setMessage(null); }}
                     className="text-xs font-bold text-slate-400 hover:text-primary transition-colors"
                 >
-                    {isSignUp ? 'Log in' : 'Create account'}
+                    {isSignUp ? 'Sudah ada akaun?' : 'Tiada akaun?'}
                 </button>
             </div>
 
@@ -114,7 +138,7 @@ export const Login: React.FC = () => {
 
             {/* Messages */}
             {message && (
-                <div className={`w-full mb-6 p-3 rounded-2xl text-xs font-medium text-center animate-in fade-in zoom-in-95 ${message.type === 'error' ? 'bg-red-500/20 text-red-200 border border-red-500/30' : 'bg-primary/20 text-primary border border-primary/30'}`}>
+                <div className={`w-full mb-6 p-4 rounded-2xl text-xs font-bold text-center animate-in fade-in zoom-in-95 leading-relaxed shadow-lg break-words ${message.type === 'error' ? 'bg-red-500/20 text-red-100 border border-red-500/50' : 'bg-primary/20 text-primary border border-primary/30'}`}>
                     {message.text}
                 </div>
             )}
@@ -127,7 +151,7 @@ export const Login: React.FC = () => {
                     <div className="group animate-in slide-in-from-left duration-300 fade-in">
                         <input 
                             type="text" 
-                            placeholder="Full Name"
+                            placeholder="Nama Penuh"
                             value={fullName}
                             onChange={(e) => setFullName(e.target.value)}
                             required
@@ -139,7 +163,7 @@ export const Login: React.FC = () => {
                 <div className="group">
                     <input 
                         type="email" 
-                        placeholder="E-mail address"
+                        placeholder="Alamat Emel"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         required
@@ -150,7 +174,7 @@ export const Login: React.FC = () => {
                 <div className="group relative">
                     <input 
                         type="password" 
-                        placeholder="Password"
+                        placeholder="Kata Laluan"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         required
@@ -158,7 +182,7 @@ export const Login: React.FC = () => {
                     />
                     {!isSignUp && (
                         <button type="button" className="absolute right-6 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 hover:text-primary transition-colors">
-                            Forgot?
+                            Lupa?
                         </button>
                     )}
                 </div>
@@ -168,7 +192,7 @@ export const Login: React.FC = () => {
                     <div className="group animate-in slide-in-from-left duration-300 fade-in delay-75">
                         <input 
                             type="password" 
-                            placeholder="Confirm Password"
+                            placeholder="Sahkan Kata Laluan"
                             value={confirmPassword}
                             onChange={(e) => setConfirmPassword(e.target.value)}
                             required
@@ -186,14 +210,14 @@ export const Login: React.FC = () => {
                         >
                             <div className={`w-3 h-3 rounded-full bg-white shadow-sm transition-transform ${rememberMe ? 'translate-x-5' : 'translate-x-0 bg-slate-500'}`}></div>
                         </div>
-                        <span className="text-xs text-slate-400 select-none">Remember me</span>
+                        <span className="text-xs text-slate-400 select-none">Ingat saya</span>
                     </div>
                 )}
 
                 {/* Submit Action - Cyan Pill Button */}
                 <div className="pt-4 flex items-center justify-between gap-4">
                     <p className="text-[10px] text-slate-500 leading-tight max-w-[150px]">
-                        By continuing, you agree to our Terms of Service.
+                        Dengan meneruskan, anda bersetuju dengan Terma Perkhidmatan kami.
                     </p>
                     <button
                         type="submit"
@@ -212,19 +236,31 @@ export const Login: React.FC = () => {
             {/* Social Divider */}
             <div className="mt-8 mb-4 flex items-center gap-4">
                 <div className="h-px bg-white/5 flex-1"></div>
-                <span className="text-[10px] text-slate-500 uppercase">Or continue with</span>
+                <span className="text-[10px] text-slate-500 uppercase">Atau teruskan dengan</span>
                 <div className="h-px bg-white/5 flex-1"></div>
             </div>
 
-            {/* Google Pill */}
-            <button
-                onClick={handleGoogleLogin}
-                disabled={loading}
-                className="w-full bg-surface-card hover:bg-surface-hover border border-white/5 rounded-full py-3 flex items-center justify-center gap-3 transition-colors group"
-            >
-                <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" className="w-4 h-4 grayscale opacity-50 group-hover:grayscale-0 group-hover:opacity-100 transition-all" />
-                <span className="text-xs font-medium text-slate-400 group-hover:text-white">Google</span>
-            </button>
+            <div className="space-y-3">
+                {/* Google Pill */}
+                <button
+                    onClick={handleGoogleLogin}
+                    disabled={loading}
+                    className="w-full bg-surface-card hover:bg-surface-hover border border-white/5 rounded-full py-3 flex items-center justify-center gap-3 transition-colors group"
+                >
+                    <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" className="w-4 h-4 grayscale opacity-50 group-hover:grayscale-0 group-hover:opacity-100 transition-all" />
+                    <span className="text-xs font-medium text-slate-400 group-hover:text-white">Google</span>
+                </button>
+
+                {/* GUEST MODE BUTTON */}
+                <button
+                    onClick={onGuestLogin}
+                    className="w-full bg-emerald-500/10 hover:bg-emerald-500 border border-emerald-500/30 hover:border-emerald-500 rounded-full py-3 flex items-center justify-center gap-3 transition-all group"
+                >
+                    <span className="material-symbols-outlined text-emerald-400 group-hover:text-white text-sm">person</span>
+                    <span className="text-xs font-bold text-emerald-400 group-hover:text-white">Teruskan sebagai Tetamu (Guest)</span>
+                </button>
+            </div>
+            
         </div>
       </div>
     </div>

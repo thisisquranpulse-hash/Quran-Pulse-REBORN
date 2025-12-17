@@ -1,8 +1,7 @@
 import React from 'react';
-import { Session } from '@supabase/supabase-js';
 
 interface ProfileCardProps {
-    user: Session['user'];
+    user: any; // Type 'any' used to bypass Session export issues
     onSignOut: () => void;
     onClose: () => void;
 }

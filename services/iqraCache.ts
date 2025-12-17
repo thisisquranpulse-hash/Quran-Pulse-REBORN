@@ -7,11 +7,11 @@ const DB_VERSION = 1;
 
 // --- Helper: Get Auth User ID ---
 const getAuthUserId = async () => {
-    const { data } = await supabase.auth.getUser();
+    const { data } = await (supabase.auth as any).getUser();
     if (data.user) {
         return data.user.id;
     }
-    // Fallback to local ID if not logged in (should be handled by App auth guard, but safe to keep)
+    // Fallback to local ID if not logged in
     let id = localStorage.getItem('pulse_user_id');
     if (!id) {
         id = crypto.randomUUID();
@@ -60,7 +60,7 @@ const getAllFromIndexedDB = async (): Promise<IqraProgress[]> => {
     }
 };
 
-// --- Main Exported Functions (Hybrid Strategy) ---
+// --- Main Exported Functions (Robust Sync) ---
 
 export const saveIqraProgress = async (progress: IqraProgress) => {
     // 1. Always save locally first (Instant UI update)
@@ -83,12 +83,11 @@ export const saveIqraProgress = async (progress: IqraProgress) => {
             console.warn("Supabase Sync Warning:", error.message);
         }
     } catch (e) {
-        console.warn("Supabase Network Error", e);
+        console.warn("Supabase Network Error (Saved Locally)", e);
     }
 };
 
 export const getIqraProgress = async (level: number): Promise<IqraProgress | undefined> => {
-    // For single item fetch, just use local for speed
     const all = await getAllIqraProgress();
     return all.find(p => p.level === level);
 };
@@ -96,34 +95,74 @@ export const getIqraProgress = async (level: number): Promise<IqraProgress | und
 export const getAllIqraProgress = async (): Promise<IqraProgress[]> => {
     const localData = await getAllFromIndexedDB();
     
-    // Try fetch from cloud to sync
     try {
          const userId = await getAuthUserId();
-         // If we are using the fallback local ID, don't fetch from Supabase unless we want to allow public read?
-         // Assuming RLS protects data, fetching with local random ID won't return anything.
          
          const { data, error } = await supabase
             .from('iqra_progress')
             .select('*')
             .eq('user_id', userId);
             
-         if (!error && data && data.length > 0) {
-             // Map cloud data to app type
-             const cloudProgress: IqraProgress[] = data.map((d: any) => ({
+         if (!error && data) {
+             const cloudData = data.map((d: any) => ({
                  level: d.level,
                  completed_pages: d.completed_pages,
                  accuracy: d.accuracy,
-                 last_updated: d.last_updated
+                 last_updated: d.last_updated || 0
              }));
-             
-             // Update local cache with cloud data
-             for (const p of cloudProgress) {
-                 await saveToIndexedDB(p);
+
+             // Conflict Resolution: Merge based on 'last_updated'
+             const allLevels = new Set([
+                ...localData.map(d => d.level), 
+                ...cloudData.map(d => d.level)
+             ]);
+
+             const mergedData: IqraProgress[] = [];
+
+             for (const level of allLevels) {
+                 const local = localData.find(d => d.level === level);
+                 const cloud = cloudData.find(d => d.level === level);
+
+                 if (local && cloud) {
+                     // Both exist, check timestamp
+                     if (cloud.last_updated > local.last_updated) {
+                         // Cloud is newer, use cloud and update local
+                         await saveToIndexedDB(cloud);
+                         mergedData.push(cloud);
+                     } else if (local.last_updated > cloud.last_updated) {
+                         // Local is newer, use local and push to cloud
+                         await supabase.from('iqra_progress').upsert({
+                             user_id: userId,
+                             level: local.level,
+                             completed_pages: local.completed_pages,
+                             accuracy: local.accuracy,
+                             last_updated: local.last_updated
+                         }, { onConflict: 'user_id, level' });
+                         mergedData.push(local);
+                     } else {
+                         // Equal, defaults to local
+                         mergedData.push(local);
+                     }
+                 } else if (cloud) {
+                     // Only in cloud (new sync), save to local
+                     await saveToIndexedDB(cloud);
+                     mergedData.push(cloud);
+                 } else if (local) {
+                     // Only in local (offline progress), push to cloud
+                     await supabase.from('iqra_progress').upsert({
+                        user_id: userId,
+                        level: local.level,
+                        completed_pages: local.completed_pages,
+                        accuracy: local.accuracy,
+                        last_updated: local.last_updated
+                    }, { onConflict: 'user_id, level' });
+                     mergedData.push(local);
+                 }
              }
-             return cloudProgress;
+             return mergedData;
          }
     } catch (e) {
-        console.warn("Using offline data", e);
+        console.warn("Sync failed, utilizing local data", e);
     }
     
     return localData;
