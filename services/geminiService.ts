@@ -87,23 +87,56 @@ export const generateDailyReflection = async () => {
   }
 };
 
+// --- DAILY HADITH ---
+export const generateDailyHadith = async () => {
+    const ai = getAiClient();
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-3-flash-preview',
+            contents: `Berikan satu Hadith Sahih yang pendek (Bukhari/Muslim) bersama sumbernya dan huraian ringkas (pengajaran) dalam Bahasa Melayu. Format jawapan dalam JSON.`,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        hadithText: { type: Type.STRING, description: "Teks hadith dalam Bahasa Melayu." },
+                        source: { type: Type.STRING, description: "Sumber hadith (e.g., HR Bukhari)." },
+                        explanation: { type: Type.STRING, description: "Huraian ringkas hadith." }
+                    },
+                    required: ["hadithText", "source", "explanation"]
+                }
+            }
+        });
+        return JSON.parse(sanitizeJson(response.text || "{}"));
+    } catch (e) {
+        console.error("Hadith Gen Error", e);
+        return {
+            hadithText: "Sesungguhnya setiap amalan itu bergantung kepada niat.",
+            source: "HR Bukhari & Muslim",
+            explanation: "Niat yang ikhlas adalah kunci penerimaan setiap ibadah."
+        };
+    }
+};
+
 // --- CHAT RESPONSE ---
 export const getChatResponse = async (userMsg: string, mode: AssistantMode, history: any[], location?: {lat: number, lng: number}) => {
     const ai = getAiClient();
     let model = 'gemini-3-flash-preview';
     const config: any = {
-        systemInstruction: "You are Ustaz Nur, a wise and friendly Islamic assistant. You provide answers based on authentic Quranic and Hadith sources. Be respectful and concise."
+        systemInstruction: "You are Ustaz Nur, a wise and friendly Islamic assistant. You provide answers based on authentic Quranic and Hadith sources. Be respectful and concise. Provide references from JAKIM or reputable scholars when asked about Fiqh."
     };
 
     if (mode === AssistantMode.DEEP) {
         model = 'gemini-3-pro-preview';
         config.thinkingConfig = { thinkingBudget: 32768 };
     } else if (mode === AssistantMode.FAST) {
-        model = 'gemini-flash-lite-latest';
+        model = 'gemini-3-flash-preview';
     } else if (mode === AssistantMode.SEARCH) {
+        model = 'gemini-3-flash-preview';
         config.tools = [{ googleSearch: {} }];
     } else if (mode === AssistantMode.MAPS) {
-        model = 'gemini-2.5-flash-latest';
+        // Maps grounding is only supported in Gemini 2.5 series models.
+        model = 'gemini-2.5-flash';
         config.tools = [{ googleMaps: {} }];
         if (location) {
             config.toolConfig = {
@@ -126,24 +159,32 @@ export const getChatResponse = async (userMsg: string, mode: AssistantMode, hist
 // --- IMAGE GENERATION ---
 export const generateImage = async (prompt: string, aspectRatio: string, imageSize: string) => {
     const ai = getAiClient();
-    // Upgrade to pro for high quality sizes
     const model = (imageSize === '2K' || imageSize === '4K') ? 'gemini-3-pro-image-preview' : 'gemini-2.5-flash-image';
     
+    // imageSize is only supported for gemini-3-pro-image-preview
+    // For gemini-2.5-flash-image, do NOT send imageSize at all.
+    const imageConfig: any = {
+        aspectRatio: aspectRatio as any,
+    };
+
+    if (model === 'gemini-3-pro-image-preview') {
+        imageConfig.imageSize = imageSize as any;
+    }
+
     const response = await ai.models.generateContent({
         model,
         contents: { parts: [{ text: prompt }] },
         config: {
-            imageConfig: {
-                aspectRatio: aspectRatio as any,
-                imageSize: imageSize as any
-            }
+            imageConfig
         }
     });
     
     const images: string[] = [];
-    for (const part of response.candidates[0].content.parts) {
-        if (part.inlineData) {
-            images.push(`data:image/png;base64,${part.inlineData.data}`);
+    if (response.candidates?.[0]?.content?.parts) {
+        for (const part of response.candidates[0].content.parts) {
+            if (part.inlineData) {
+                images.push(`data:image/png;base64,${part.inlineData.data}`);
+            }
         }
     }
     return images;
@@ -202,13 +243,13 @@ export const generateVerseInsight = async (arabic: string, translation: string, 
                                 word: { type: Type.STRING },
                                 meaning: { type: Type.STRING }
                             },
-                            required: ['word', 'meaning']
+                            required: ["word", "meaning"]
                         }
                     },
                     coreTheme: { type: Type.STRING },
                     tafsir: { type: Type.STRING }
                 },
-                required: ['history', 'keyWords', 'coreTheme', 'tafsir']
+                required: ["history", "keyWords", "coreTheme", "tafsir"]
             }
         }
     });
@@ -287,7 +328,7 @@ export const analyzeIqraReading = async (audioBlob: Blob, expectedText: string, 
                     accuracy_score: { type: Type.NUMBER },
                     feedback_bm: { type: Type.STRING }
                 },
-                required: ['is_correct', 'accuracy_score', 'feedback_bm']
+                required: ["is_correct", "accuracy_score", "feedback_bm"]
             }
         }
     });
@@ -306,7 +347,7 @@ export const generateIqraPage = async (level: number) => {
         model: 'gemini-3-flash-preview',
         contents: `Generate a practice page for Iqra Level ${level}. Focus on appropriate rules for this level. Respond in JSON.`,
         config: {
-            responseMimeType: 'application/json',
+            responseMimeType: "application/json",
             responseSchema: {
                 type: Type.OBJECT,
                 properties: {
@@ -320,7 +361,7 @@ export const generateIqraPage = async (level: number) => {
                     },
                     expectedText: { type: Type.STRING }
                 },
-                required: ['instruction', 'rows', 'expectedText']
+                required: ["instruction", "rows", "expectedText"]
             }
         }
     });
@@ -330,8 +371,9 @@ export const generateIqraPage = async (level: number) => {
 // --- IDENTIFY LOCATION & MOSQUES ---
 export const identifyLocation = async (lat: number, lng: number) => {
     const ai = getAiClient();
+    // Maps grounding is only supported in Gemini 2.5 series models.
     const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash-latest",
+        model: "gemini-2.5-flash",
         contents: "Identify the current location and find nearby mosques for prayer. Respond with 'LOCATION: [Name]' and a list.",
         config: {
             tools: [{ googleMaps: {} }],

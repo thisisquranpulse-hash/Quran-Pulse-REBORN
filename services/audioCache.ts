@@ -58,7 +58,7 @@ export const saveAudio = async (item: CachedAudioItem): Promise<void> => {
     }
 };
 
-// Retrieve base64 audio string from the database
+// Retrieve base64 audio string from the database by ID
 export const getAudio = async (id: number): Promise<string | undefined> => {
     try {
         const db = await openDB();
@@ -74,6 +74,27 @@ export const getAudio = async (id: number): Promise<string | undefined> => {
         });
     } catch (e) {
         console.error("Error reading from cache", e);
+        return undefined;
+    }
+};
+
+// Retrieve audio item by verseKey (e.g. for Iqra or specific verse lookup)
+export const getAudioByKey = async (key: string): Promise<CachedAudioItem | undefined> => {
+    try {
+        const db = await openDB();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(STORE_NAME, 'readonly');
+            const store = tx.objectStore(STORE_NAME);
+            const index = store.index('verseKey');
+            const req = index.get(key);
+            
+            req.onsuccess = () => {
+                resolve(req.result as CachedAudioItem | undefined);
+            };
+            req.onerror = () => reject(req.error);
+        });
+    } catch (e) {
+        console.error("Error reading from cache by key", e);
         return undefined;
     }
 };
